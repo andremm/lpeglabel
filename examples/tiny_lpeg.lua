@@ -4,8 +4,19 @@ local errors = require "tiny_errors"
 
 lpeg.locale(lpeg)
 
+local function setffp (s, i, t)
+  if not t.ffp or i > t.ffp then
+    t.ffp = i
+  end
+  return false
+end
+
+local function updateffp ()
+  return lpeg.Cmt(lpeg.Carg(1), setffp)
+end
+
 local function token (pat)
-  return pat * lpeg.V"Skip"
+  return pat * lpeg.V"Skip" + updateffp() * lpeg.P(false)
 end
 
 local function symb (str)
@@ -85,13 +96,21 @@ local function getcontents(filename)
   return contents
 end
 
+local function lineno (s, i)
+  if i == 1 then return 1, 1 end
+  local rest, num = s:sub(1,i):gsub("[^\n]*\n", "")
+  local r = #rest
+  return 1 + num, r ~= 0 and r or 1
+end
+
 if #arg ~= 1 then
   print ("Usage: lua tiny_lpeg.lua <file>")
   os.exit(1)
 end
 
 local input = getcontents(arg[1])
-local t, l, r = lpeg.match(G, input)
+local errorinfo = {}
+local t, l, r = lpeg.match(G, input, nil, errorinfo)
 
 local function printt(t, i)
   io.write (string.format (string.rep(" ", i) .. "{tag = %s,\n", t.tag))
@@ -108,8 +127,9 @@ end
 if t then
   print(ast.__tostring(t))
 else
-  print(l)
-  print(errors.errors[l].msg)
+  local line, col = lineno(input, errorinfo.ffp)
+  local error_msg = string.format("Line %d: %s", line, errors.errors[l].msg)
+  print(error_msg)
 end
 
 os.exit(0)
